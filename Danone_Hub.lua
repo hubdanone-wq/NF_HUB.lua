@@ -510,12 +510,72 @@ local function MakeSelect(title, description, options, defaultIndex, callback)
     end)
 end
 
+-- Instant Steal (baseado em uma implementação pública; o Remote pode mudar no jogo)
+local instantStealEnabled = false
+local instantStealRunning = false
+
+local function GetCharacterRoot()
+    local character = player.Character or player.CharacterAdded:Wait()
+    return character:FindFirstChild("HumanoidRootPart")
+end
+
+local function FindNearestEgg()
+    local root = GetCharacterRoot()
+    if not root then return nil end
+
+    local nearest, nearestDistance = nil, math.huge
+    for _, obj in ipairs(workspace:GetDescendants()) do
+        if obj:IsA("BasePart") and string.find(string.lower(obj.Name), "egg", 1, true) then
+            local distance = (obj.Position - root.Position).Magnitude
+            if distance < nearestDistance then
+                nearest = obj
+                nearestDistance = distance
+            end
+        end
+    end
+    return nearest
+end
+
+local function InstantStealLoop()
+    if instantStealRunning then return end
+    instantStealRunning = true
+
+    task.spawn(function()
+        while instantStealEnabled do
+            local root = GetCharacterRoot()
+            local egg = FindNearestEgg()
+            local stealRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Steal")
+
+            if root and egg and stealRemote and stealRemote:IsA("RemoteEvent") then
+                root.CFrame = egg.CFrame + Vector3.new(0, 3, 0)
+                stealRemote:FireServer(egg)
+            elseif not stealRemote then
+                warn("[Danone Hub] Remote 'Steal' não foi encontrado. A implementação pública pode estar desatualizada.")
+                instantStealEnabled = false
+                break
+            end
+
+            task.wait(0.5)
+        end
+
+        instantStealRunning = false
+    end)
+end
+
 local PagesData = {
     {
         name = "Farm",
         icon = "●",
         desc = "Alvo e campo.",
         build = function()
+            MakeSection("Instant Steal")
+            MakeToggle("Instant Steal", "Procura o ovo mais próximo e tenta executar a coleta.", false, function(enabled)
+                instantStealEnabled = enabled
+                if enabled then
+                    InstantStealLoop()
+                end
+            end)
+
             MakeSection("Farm")
             MakeToggle("Farm automático", "Ativa a rotina principal de farm.", false)
             MakeSlider("Velocidade da volta", "Controla a velocidade da rotina.", 50, 800, 400)
